@@ -1,6 +1,6 @@
 # KernAuth Python example
 
-Protocol example. This is not the official SDK. The official client is the C++ SDK. This file calls the same activate, validate, and deactivate routes and checks the Ed25519 signature.
+Protocol example. This is not the official SDK. The official client is the C++ SDK. This file calls validate and checks the Ed25519 signature.
 
 ## Add it
 
@@ -22,28 +22,12 @@ app = KernAuth(
 )
 ```
 
-## Activate
-
-```python
-if not app.activate(license_key, installation_id):
-    raise SystemExit(app.message)
-```
-
 ## Validate
 
 ```python
 if not app.validate(license_key, installation_id):
     raise SystemExit(app.message)
 ```
-
-## Deactivate
-
-```python
-if not app.deactivate(license_key, installation_id):
-    raise SystemExit(app.message)
-```
-
-`app.message` is `Device deactivated` after a successful deactivate.
 
 A patched program can still skip the check. These examples do not add anti-debug or anti-VM code.
 

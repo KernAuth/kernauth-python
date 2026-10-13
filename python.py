@@ -24,14 +24,8 @@ class KernAuth:
         self.success = False
         self.message = ""
 
-    def activate(self, license_key, installation_id):
-        return self._call("activate", license_key, installation_id, "License is active")
-
     def validate(self, license_key, installation_id):
         return self._call("validate", license_key, installation_id, "License is active")
-
-    def deactivate(self, license_key, installation_id):
-        return self._call("deactivate", license_key, installation_id, "Device deactivated")
 
     def _call(self, mode, license_key, installation_id, ok_message):
         try:
@@ -49,7 +43,7 @@ if __name__ == "__main__":
     license_key = os.environ["KERN_LICENSE_KEY"]
     installation_id = os.environ["KERN_INSTALLATION_ID"]
     app = KernAuth(API, APP_ID, KEY_ID, PUBLIC_KEY)
-    if not app.activate(license_key, installation_id) or not app.validate(license_key, installation_id) or not app.deactivate(license_key, installation_id):
+    if not app.validate(license_key, installation_id):
         raise SystemExit(app.message)
     print(app.message)
 
@@ -99,8 +93,5 @@ def request(mode, license_key, installation_id, api=API, app_id=APP_ID, key_id=K
                                      headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(outgoing, timeout=10) as result:
         response = json.load(result)
-    if mode == "deactivate":
-        if response.get("deactivated") is not True:
-            raise RuntimeError("Deactivation was not confirmed")
-    elif not verify_grant(response, nonce, app_id, key_id, public_key):
+    if not verify_grant(response, nonce, app_id, key_id, public_key):
         raise RuntimeError("Invalid or expired signed entitlement")
