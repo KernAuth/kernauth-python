@@ -49,13 +49,13 @@ def verify_grant(response, nonce, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLI
         return False
 
 
-def request(mode, license_key, installation_id):
+def request(mode, license_key, installation_id, api=API, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY):
     nonce = secrets.token_urlsafe(24)
     fingerprint = hashlib.sha256(f"kernauth-device-v1:{installation_id}".encode()).hexdigest()
-    body = {"protocol_version": 1, "public_app_id": APP_ID, "client_version": "1.0.0",
+    body = {"protocol_version": 1, "public_app_id": app_id, "client_version": "1.0.0",
             "license_key": license_key, "fingerprint_version": 1, "device_fingerprint": fingerprint,
             "installation_id": installation_id, "nonce": nonce}
-    outgoing = urllib.request.Request(f"{API}/v1/client/{mode}",
+    outgoing = urllib.request.Request(f"{api}/v1/client/{mode}",
                                      data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(outgoing, timeout=10) as result:
@@ -63,13 +63,47 @@ def request(mode, license_key, installation_id):
     if mode == "deactivate":
         if response.get("deactivated") is not True:
             raise RuntimeError("Deactivation was not confirmed")
-    elif not verify_grant(response, nonce):
+    elif not verify_grant(response, nonce, app_id, key_id, public_key):
         raise RuntimeError("Invalid or expired signed entitlement")
+
+
+class KernAuth:
+    """One application. Paste the public values from Developers."""
+
+    def __init__(self, api=API, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY):
+        self.api = api
+        self.app_id = app_id
+        self.key_id = key_id
+        self.public_key = public_key
+        self.success = False
+        self.message = ""
+
+    def activate(self, license_key, installation_id):
+        return self._call("activate", license_key, installation_id, "License is active")
+
+    def validate(self, license_key, installation_id):
+        return self._call("validate", license_key, installation_id, "License is active")
+
+    def deactivate(self, license_key, installation_id):
+        return self._call("deactivate", license_key, installation_id, "Device deactivated")
+
+    def _call(self, mode, license_key, installation_id, ok_message):
+        try:
+            request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
+        except Exception as error:
+            self.success = False
+            self.message = str(error)
+            return False
+        self.success = True
+        self.message = ok_message
+        return True
 
 
 if __name__ == "__main__":
     license_key = os.environ["KERN_LICENSE_KEY"]
     installation_id = os.environ["KERN_INSTALLATION_ID"]  # Persist once per device.
-    for operation in ("activate", "validate", "deactivate"):
-        request(operation, license_key, installation_id)
-    print("Signed entitlement verified and device deactivated")
+    app = KernAuth(API, APP_ID, KEY_ID, PUBLIC_KEY)
+    for operation in (app.activate, app.validate, app.deactivate):
+        if not operation(license_key, installation_id):
+            raise SystemExit(app.message)
+    print(app.message)
