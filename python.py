@@ -1,10 +1,8 @@
-"""KernAuth protocol example. Install: python -m pip install cryptography"""
 import base64
 import hashlib
 import json
 import os
 import secrets
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -15,6 +13,47 @@ API = "https://api.kernauth.com"
 APP_ID = "__PUBLIC_APP_ID__"
 KEY_ID = "__KEY_ID__"
 PUBLIC_KEY = "__PUBLIC_KEY__"
+
+
+class KernAuth:
+    def __init__(self, api=API, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY):
+        self.api = api
+        self.app_id = app_id
+        self.key_id = key_id
+        self.public_key = public_key
+        self.success = False
+        self.message = ""
+
+    def activate(self, license_key, installation_id):
+        return self._call("activate", license_key, installation_id, "License is active")
+
+    def validate(self, license_key, installation_id):
+        return self._call("validate", license_key, installation_id, "License is active")
+
+    def deactivate(self, license_key, installation_id):
+        return self._call("deactivate", license_key, installation_id, "Device deactivated")
+
+    def _call(self, mode, license_key, installation_id, ok_message):
+        try:
+            request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
+        except Exception as error:
+            self.success = False
+            self.message = str(error)
+            return False
+        self.success = True
+        self.message = ok_message
+        return True
+
+
+if __name__ == "__main__":
+    license_key = os.environ["KERN_LICENSE_KEY"]
+    installation_id = os.environ["KERN_INSTALLATION_ID"]
+    app = KernAuth(API, APP_ID, KEY_ID, PUBLIC_KEY)
+    if not app.activate(license_key, installation_id) or not app.validate(license_key, installation_id) or not app.deactivate(license_key, installation_id):
+        raise SystemExit(app.message)
+    print(app.message)
+
+
 FIELDS = ("protocol_version", "entitlement_id", "application_id", "license_id", "status",
           "features", "device_id", "issued_at", "expires_at", "server_time", "nonce", "key_id")
 
@@ -65,45 +104,3 @@ def request(mode, license_key, installation_id, api=API, app_id=APP_ID, key_id=K
             raise RuntimeError("Deactivation was not confirmed")
     elif not verify_grant(response, nonce, app_id, key_id, public_key):
         raise RuntimeError("Invalid or expired signed entitlement")
-
-
-class KernAuth:
-    """One application. Paste the public values from Developers."""
-
-    def __init__(self, api=API, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY):
-        self.api = api
-        self.app_id = app_id
-        self.key_id = key_id
-        self.public_key = public_key
-        self.success = False
-        self.message = ""
-
-    def activate(self, license_key, installation_id):
-        return self._call("activate", license_key, installation_id, "License is active")
-
-    def validate(self, license_key, installation_id):
-        return self._call("validate", license_key, installation_id, "License is active")
-
-    def deactivate(self, license_key, installation_id):
-        return self._call("deactivate", license_key, installation_id, "Device deactivated")
-
-    def _call(self, mode, license_key, installation_id, ok_message):
-        try:
-            request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
-        except Exception as error:
-            self.success = False
-            self.message = str(error)
-            return False
-        self.success = True
-        self.message = ok_message
-        return True
-
-
-if __name__ == "__main__":
-    license_key = os.environ["KERN_LICENSE_KEY"]
-    installation_id = os.environ["KERN_INSTALLATION_ID"]  # Persist once per device.
-    app = KernAuth(API, APP_ID, KEY_ID, PUBLIC_KEY)
-    for operation in (app.activate, app.validate, app.deactivate):
-        if not operation(license_key, installation_id):
-            raise SystemExit(app.message)
-    print(app.message)
