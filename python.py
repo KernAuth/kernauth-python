@@ -33,6 +33,10 @@ class KernAuth:
     def _call(self, mode, license_key, installation_id, ok_message):
         try:
             self.entitlement = request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
+            features = self.entitlement["features"]
+            if isinstance(features, str):
+                features = json.loads(features)
+            self.entitlement["features"] = json.dumps(features, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         except Exception as error:
             self.success = False
             self.message = str(error)
@@ -72,9 +76,6 @@ if __name__ == "__main__":
         raise SystemExit(app.message)
     ent = app.entitlement
     features = ent["features"]
-    if isinstance(features, str):
-        features = json.loads(features)
-    ent["features"] = json.dumps(features, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     print(f"Status: {ent['status']}")
     print(f"Features: {ent['features']}")
     print(f"License: {ent['license_id']}")
