@@ -7,6 +7,8 @@ import re
 import secrets
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -84,14 +86,22 @@ def machine_hwid():
 
 if __name__ == "__main__":
     app = KernAuth(API, APP_ID, PUBLIC_KEY)
-    if not app.validate(license_key(), installation_id()):
+    key = license_key()
+    hwid = installation_id()
+    if not app.validate(key, hwid):
         raise SystemExit(app.message)
     ent = app.entitlement
-    features = ent["features"]
     print(f"Status: {ent['status']}")
     print(f"Features: {ent['features']}")
     print(f"License: {ent['license_id']}")
     print(f"Check expires: {ent['expires_at']}")
+    while True:
+        time.sleep(60)
+        try:
+            heartbeat(key, hwid, app.api, app.app_id)
+        except Exception as error:
+            print(error)
+            raise SystemExit(1)
 
 
 FIELDS = ("protocol_version", "entitlement_id", "application_id", "license_id", "status",
@@ -128,17 +138,40 @@ def verify_grant(response, nonce, app_id=APP_ID, public_key=PUBLIC_KEY, now=None
         return False
 
 
-def request(mode, license_key, installation_id, api=API, app_id=APP_ID, public_key=PUBLIC_KEY):
+def api_message(raw, fallback):
+    try:
+        payload = json.loads(raw)
+        message = payload.get("error", {}).get("message")
+        if isinstance(message, str) and message:
+            return message
+    except Exception:
+        pass
+    return fallback
+
+
+def post_json(path, license_key, installation_id, api, app_id):
     nonce = secrets.token_urlsafe(24)
     fingerprint = hashlib.sha256(f"kernauth-device-v1:{installation_id}".encode()).hexdigest()
     body = {"protocol_version": 1, "public_app_id": app_id, "client_version": "1.0.0",
             "license_key": license_key, "fingerprint_version": 1, "device_fingerprint": fingerprint,
             "installation_id": installation_id, "nonce": nonce}
-    outgoing = urllib.request.Request(f"{api}/v1/client/{mode}",
-                                     data=json.dumps(body).encode(),
+    outgoing = urllib.request.Request(f"{api}{path}", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(outgoing, timeout=10) as result:
-        response = json.load(result)
+    try:
+        with urllib.request.urlopen(outgoing, timeout=10) as result:
+            return nonce, json.load(result)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(api_message(error.read(), f"request failed ({error.code})")) from None
+
+
+def heartbeat(license_key, installation_id, api=API, app_id=APP_ID):
+    _, payload = post_json("/v1/client/heartbeat", license_key, installation_id, api, app_id)
+    if payload.get("ok") is not True:
+        raise RuntimeError("heartbeat failed")
+
+
+def request(mode, license_key, installation_id, api=API, app_id=APP_ID, public_key=PUBLIC_KEY):
+    nonce, response = post_json(f"/v1/client/{mode}", license_key, installation_id, api, app_id)
     if not verify_grant(response, nonce, app_id, public_key):
         raise RuntimeError("Invalid or expired signed entitlement")
     return response["entitlement"]
