@@ -18,22 +18,20 @@ class ProtocolVectors(unittest.TestCase):
                 now = datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc)
                 self.assertEqual(canonical(fields), vector["canonical"].encode())
                 self.assertTrue(verify_grant(grant, fields["nonce"], fields["application_id"],
-                                             fields["key_id"], vector["public_key"], now))
+                                             vector["public_key"], now))
                 self.assertFalse(verify_grant(grant, "wrong", fields["application_id"],
-                                              fields["key_id"], vector["public_key"], now))
+                                              vector["public_key"], now))
                 self.assertFalse(verify_grant(grant, fields["nonce"], "pub_other_app",
-                                              fields["key_id"], vector["public_key"], now))
-                self.assertFalse(verify_grant(grant, fields["nonce"], fields["application_id"],
-                                              "wrong-key", vector["public_key"], now))
+                                              vector["public_key"], now))
                 self.assertFalse(verify_grant(
                     {"entitlement": fields, "signature": vector["signature"] + "AA"},
-                    fields["nonce"], fields["application_id"], fields["key_id"], vector["public_key"], now))
+                    fields["nonce"], fields["application_id"], vector["public_key"], now))
                 self.assertFalse(verify_grant(grant, fields["nonce"], fields["application_id"],
-                                              fields["key_id"], vector["public_key"],
+                                              vector["public_key"],
                                               datetime(2026, 1, 1, 0, 16, tzinfo=timezone.utc)))
                 tampered = {"entitlement": dict(fields, device_id="other"), "signature": vector["signature"]}
                 self.assertFalse(verify_grant(tampered, fields["nonce"], fields["application_id"],
-                                              fields["key_id"], vector["public_key"], now))
+                                              vector["public_key"], now))
 
 
 if __name__ == "__main__":

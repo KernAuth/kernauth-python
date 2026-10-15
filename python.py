@@ -15,15 +15,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 API = "https://api.kernauth.com"
 APP_ID = "__PUBLIC_APP_ID__"
-KEY_ID = "__KEY_ID__"
 PUBLIC_KEY = "__PUBLIC_KEY__"
 
 
 class KernAuth:
-    def __init__(self, api=API, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY):
+    def __init__(self, api=API, app_id=APP_ID, public_key=PUBLIC_KEY):
         self.api = api
         self.app_id = app_id
-        self.key_id = key_id
         self.public_key = public_key
         self.success = False
         self.message = ""
@@ -34,7 +32,7 @@ class KernAuth:
 
     def _call(self, mode, license_key, installation_id, ok_message):
         try:
-            self.entitlement = request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
+            self.entitlement = request(mode, license_key, installation_id, self.api, self.app_id, self.public_key)
             features = self.entitlement["features"]
             if isinstance(features, str):
                 features = json.loads(features)
@@ -85,7 +83,7 @@ def machine_hwid():
 
 
 if __name__ == "__main__":
-    app = KernAuth(API, APP_ID, KEY_ID, PUBLIC_KEY)
+    app = KernAuth(API, APP_ID, PUBLIC_KEY)
     if not app.validate(license_key(), installation_id()):
         raise SystemExit(app.message)
     ent = app.entitlement
@@ -114,12 +112,12 @@ def canonical(entitlement):
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def verify_grant(response, nonce, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY, now=None):
+def verify_grant(response, nonce, app_id=APP_ID, public_key=PUBLIC_KEY, now=None):
     ent = response["entitlement"]
     now = now or datetime.now(timezone.utc)
     expiry = datetime.fromisoformat(ent["expires_at"].replace("Z", "+00:00"))
     if (ent["protocol_version"] != 1 or ent["nonce"] != nonce or
-            ent["application_id"] != app_id or ent["key_id"] != key_id or
+            ent["application_id"] != app_id or
             ent["status"] != "active" or expiry <= now):
         return False
     try:
@@ -130,7 +128,7 @@ def verify_grant(response, nonce, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLI
         return False
 
 
-def request(mode, license_key, installation_id, api=API, app_id=APP_ID, key_id=KEY_ID, public_key=PUBLIC_KEY):
+def request(mode, license_key, installation_id, api=API, app_id=APP_ID, public_key=PUBLIC_KEY):
     nonce = secrets.token_urlsafe(24)
     fingerprint = hashlib.sha256(f"kernauth-device-v1:{installation_id}".encode()).hexdigest()
     body = {"protocol_version": 1, "public_app_id": app_id, "client_version": "1.0.0",
@@ -141,6 +139,6 @@ def request(mode, license_key, installation_id, api=API, app_id=APP_ID, key_id=K
                                      headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(outgoing, timeout=10) as result:
         response = json.load(result)
-    if not verify_grant(response, nonce, app_id, key_id, public_key):
+    if not verify_grant(response, nonce, app_id, public_key):
         raise RuntimeError("Invalid or expired signed entitlement")
     return response["entitlement"]

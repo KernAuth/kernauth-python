@@ -1,6 +1,6 @@
 # KernAuth Python example
 
-Paste the public app ID, key ID, and public key from Developers into `python.py`. Install cryptography, then run the file.
+Paste the public app ID and public key from Developers into `python.py`. Install cryptography, then run the file.
 
 ## Instance
 
@@ -8,7 +8,6 @@ Paste the public app ID, key ID, and public key from Developers into `python.py`
 app = KernAuth(
     api="https://api.kernauth.com",
     app_id="__PUBLIC_APP_ID__",
-    key_id="__KEY_ID__",
     public_key="__PUBLIC_KEY__",
 )
 ```
