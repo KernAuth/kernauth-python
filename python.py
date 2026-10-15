@@ -2,11 +2,13 @@ import base64
 import hashlib
 import json
 import os
+import platform
+import re
 import secrets
+import subprocess
 import sys
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -60,14 +62,26 @@ def installation_id():
     value = os.environ.get("KERN_INSTALLATION_ID", "").strip()
     if value:
         return value
-    path = Path("kernauth-install")
-    if path.exists():
-        saved = path.read_text().strip()
-        if saved:
-            return saved
-    saved = secrets.token_hex(16)
-    path.write_text(saved + "\n")
-    return saved
+    hwid = machine_hwid().strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{8,64}", hwid):
+        return hwid
+    raise SystemExit("Could not read the HWID")
+
+
+def machine_hwid():
+    system = platform.system()
+    if system == "Windows":
+        return subprocess.check_output(
+            ["powershell.exe", "-NoProfile", "-Command",
+             "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value"],
+            text=True,
+        )
+    if system == "Darwin":
+        output = subprocess.check_output(["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"], text=True)
+        match = re.search(r'"IOPlatformUUID" = "([^"]+)"', output)
+        return match.group(1) if match else ""
+    with open("/etc/machine-id", encoding="utf-8") as handle:
+        return handle.read()
 
 
 if __name__ == "__main__":
