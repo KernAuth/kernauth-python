@@ -3,8 +3,10 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -23,29 +25,60 @@ class KernAuth:
         self.public_key = public_key
         self.success = False
         self.message = ""
+        self.entitlement = None
 
     def validate(self, license_key, installation_id):
         return self._call("validate", license_key, installation_id, "License is active")
 
     def _call(self, mode, license_key, installation_id, ok_message):
         try:
-            request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
+            self.entitlement = request(mode, license_key, installation_id, self.api, self.app_id, self.key_id, self.public_key)
         except Exception as error:
             self.success = False
             self.message = str(error)
+            self.entitlement = None
             return False
         self.success = True
         self.message = ok_message
         return True
 
 
+def license_key():
+    value = os.environ.get("KERN_LICENSE_KEY", "").strip()
+    if value:
+        return value
+    if sys.stdin.isatty():
+        return input("Enter license: ").strip()
+    return sys.stdin.readline().strip()
+
+
+def installation_id():
+    value = os.environ.get("KERN_INSTALLATION_ID", "").strip()
+    if value:
+        return value
+    path = Path("kernauth-install")
+    if path.exists():
+        saved = path.read_text().strip()
+        if saved:
+            return saved
+    saved = secrets.token_hex(16)
+    path.write_text(saved + "\n")
+    return saved
+
+
 if __name__ == "__main__":
-    license_key = os.environ["KERN_LICENSE_KEY"]
-    installation_id = os.environ["KERN_INSTALLATION_ID"]
     app = KernAuth(API, APP_ID, KEY_ID, PUBLIC_KEY)
-    if not app.validate(license_key, installation_id):
+    if not app.validate(license_key(), installation_id()):
         raise SystemExit(app.message)
-    print(app.message)
+    ent = app.entitlement
+    features = ent["features"]
+    if isinstance(features, str):
+        features = json.loads(features)
+    ent["features"] = json.dumps(features, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    print(f"Status: {ent['status']}")
+    print(f"Features: {ent['features']}")
+    print(f"License: {ent['license_id']}")
+    print(f"Check expires: {ent['expires_at']}")
 
 
 FIELDS = ("protocol_version", "entitlement_id", "application_id", "license_id", "status",
@@ -95,3 +128,4 @@ def request(mode, license_key, installation_id, api=API, app_id=APP_ID, key_id=K
         response = json.load(result)
     if not verify_grant(response, nonce, app_id, key_id, public_key):
         raise RuntimeError("Invalid or expired signed entitlement")
+    return response["entitlement"]
